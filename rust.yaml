@@ -1,0 +1,30 @@
+name: Release Rust versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust_version: ["1.79.0"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download Rust
+      run: |
+        curl -LO https://static.rust-lang.org/dist/rust-${{ matrix.rust_version }}-x86_64-apple-darwin.pkg
+
+    - name: Upload Binaries to Release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: rust-${{ matrix.rust_version }}-x86_64-apple-darwin.pkg
+        asset_name: rust-${{ matrix.rust_version }}-x86_64-apple-darwin.pkg
+        tag: rust-${{ matrix.rust_version }}-macos11
+        overwrite: false

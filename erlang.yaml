@@ -1,0 +1,223 @@
+name: Build Erlang versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build-dependencies:
+    runs-on: macos-11
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Environment
+        run: |
+          sudo mkdir -p /usr/local/work/{openssl,unixodbc,wxwidgets,libxslt,erlang@27.0,erlang@24.3.4.17}
+
+      - name: Build Dependencies
+        run: |
+          # Function to build and package dependencies
+          build_and_package() {
+            local url=$1
+            local archive_name=$2
+            local unpacked_name=$3
+            local dir_name=$4
+            local prefix=$5
+            local extra_commands=$6
+            local export=$7
+
+            curl -LO $url
+            tar -xf $archive_name
+            mv $unpacked_name $dir_name
+            cd $dir_name
+            $extra_commands
+            ./configure --prefix=$prefix
+            make
+            sudo make install
+            $export
+            cd ..
+            sudo tar -czvf "${unpacked_name}-macos11.tar.gz" -s "|^/|${unpacked_name}-macos11/|" $prefix/*
+            sudo rm -rf $dir_name $archive_name
+          }
+
+          # OpenSSL
+          build_and_package \
+            "https://github.com/openssl/openssl/releases/download/openssl-3.3.1/openssl-3.3.1.tar.gz" \
+            "openssl-3.3.1.tar.gz" \
+            "openssl-3.3.1" \
+            "openssl" \
+            "/usr/local/work/openssl" \
+            "" \
+            "export PATH=/usr/local/work/openssl/bin:$PATH; export LD_LIBRARY_PATH=/usr/local/work/openssl/lib:$LD_LIBRARY_PATH"
+
+          # unixODBC
+          build_and_package \
+            "https://www.unixodbc.org/unixODBC-2.3.12.tar.gz" \
+            "unixODBC-2.3.12.tar.gz" \
+            "unixODBC-2.3.12" \
+            "unixodbc" \
+            "/usr/local/work/unixodbc" \
+            "" \
+            "export PATH=/usr/local/work/unixodbc/bin:$PATH; export LD_LIBRARY_PATH=/usr/local/work/unixodbc/lib:$LD_LIBRARY_PATH"
+
+          # wxWidgets
+          build_and_package \
+            "https://github.com/wxWidgets/wxWidgets/releases/download/v3.2.5/wxWidgets-3.2.5.tar.bz2" \
+            "wxWidgets-3.2.5.tar.bz2" \
+            "wxWidgets-3.2.5" \
+            "wxwidgets" \
+            "/usr/local/work/wxwidgets" \
+            "" \
+            "export PATH=/usr/local/work/wxwidgets/bin:$PATH; export LD_LIBRARY_PATH=/usr/local/work/wxwidgets/lib:$LD_LIBRARY_PATH"
+
+          # libxslt
+          build_and_package \
+            "https://gitlab.gnome.org/GNOME/libxslt/-/archive/v1.1.41/libxslt-v1.1.41.tar.gz" \
+            "libxslt-v1.1.41.tar.gz" \
+            "libxslt-v1.1.41" \
+            "libxslt" \
+            "/usr/local/work/libxslt" \
+            "./autogen.sh" \
+            "export PATH=/usr/local/work/libxslt/bin:$PATH; export LD_LIBRARY_PATH=/usr/local/work/libxslt/lib:$LD_LIBRARY_PATH"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependencies-macos11
+          path: |
+            openssl-3.3.1-macos11.tar.gz
+            unixodbc-2.3.12-macos11.tar.gz
+            wxwidgets-3.2.5-macos11.tar.gz
+            libxslt-v1.1.41-macos11.tar.gz
+
+      - name: Upload OpenSSL to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: openssl-3.3.1-macos11.tar.gz
+          asset_name: openssl-3.3.1-macos11.tar.gz
+          tag: dependencies-macos11
+          overwrite: false
+
+      - name: Upload unixODBC to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: unixodbc-2.3.12-macos11.tar.gz
+          asset_name: unixodbc-2.3.12-macos11.tar.gz
+          tag: dependencies-macos11
+          overwrite: false
+
+      - name: Upload wxWidgets to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: wxwidgets-3.2.5-macos11.tar.gz
+          asset_name: wxwidgets-3.2.5-macos11.tar.gz
+          tag: dependencies-macos11
+          overwrite: false
+
+      - name: Upload libxslt to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: libxslt-v1.1.41-macos11.tar.gz
+          asset_name: libxslt-v1.1.41-macos11.tar.gz
+          tag: dependencies-macos11
+          overwrite: false
+
+      - name: Build Erlang Versions
+        run: |
+          build_erlang() {
+            local version=$1
+            local url=$2
+            local archive_name=$3
+            local unpacked_name=$4
+            local dir_name=$5
+            local prefix=$6
+
+            wget $url
+            tar -xzf $archive_name
+            mv $unpacked_name $dir_name
+            cd $dir_name && ./otp_build autoconf
+
+            args=(
+              --disable-debug
+              --disable-silent-rules
+              --prefix=$prefix
+              --enable-dynamic-ssl-lib
+              --enable-hipe
+              --enable-shared-zlib
+              --enable-smp-support
+              --enable-threads
+              --enable-wx
+              --with-odbc=/usr/local/work/unixodbc
+              --with-ssl=/usr/local/work/openssl
+              --without-javac
+            )
+
+            if [[ "${RUNNER_OS}" == "macOS" ]]; then
+              args+=(
+                --enable-darwin-64bit
+                --enable-kernel-poll
+                --with-dynamic-trace=dtrace
+              )
+            fi
+
+            ./configure "${args[@]}"
+            make
+            sudo make install
+            cd ..
+            sudo tar -czvf "erlang-${version}-macos11.tar.gz" -s "|^/|erlang-${version}-macos11/|" $prefix/*
+            sudo rm -rf $dir_name $archive_name
+          }
+
+          build_erlang \
+            "27.0" \
+            "https://github.com/erlang/otp/releases/download/OTP-27.0/otp_src_27.0.tar.gz" \
+            "otp_src_27.0.tar.gz" \
+            "otp_src_27.0" \
+            "erlang@27.0" \
+            "/usr/local/work/erlang@27.0"
+
+          build_erlang \
+            "24.3.4.17" \
+            "https://github.com/erlang/otp/releases/download/OTP-24.3.4.17/otp_src_24.3.4.17.tar.gz" \
+            "otp_src_24.3.4.17.tar.gz" \
+            "otp_src_24.3.4.17" \
+            "erlang@24.3.4.17" \
+            "/usr/local/work/erlang@24.3.4.17"
+
+      - name: Verify Erlang Versions
+        run: |
+          /usr/local/work/erlang@27.0/bin/erl -version
+          /usr/local/work/erlang@24.3.4.17/bin/erl -version
+
+      - name: Upload Erlang Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: erlang-macos11
+          path: |
+            erlang-27.0-macos11.tar.gz
+            erlang-24.3.4.17-macos11.tar.gz
+
+      - name: Upload Erlang 27.0 to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: erlang-27.0-macos11.tar.gz
+          asset_name: erlang-27.0-macos11.tar.gz
+          tag: erlang-macos11
+          overwrite: false
+
+      - name: Upload Erlang 24.3.4.17 to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: erlang-24.3.4.17-macos11.tar.gz
+          asset_name: erlang-24.3.4.17-macos11.tar.gz
+          tag: erlang-macos11
+          overwrite: false

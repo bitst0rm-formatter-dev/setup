@@ -1,0 +1,62 @@
+name: Build AStyle versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build-astyle:
+    runs-on: macos-11
+
+    strategy:
+      matrix:
+        astyle-version: ["3.5"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          brew install cmake
+
+      - name: Download AStyle
+        run: |
+          version="${{ matrix.astyle-version }}"
+          curl -LO "https://netcologne.dl.sourceforge.net/project/astyle/astyle/astyle%20${version}/astyle-${version}.tar.bz2"
+          tar -xjf "astyle-${version}.tar.bz2"
+
+      - name: Build AStyle
+        run: |
+          version="${{ matrix.astyle-version }}"
+          cd "astyle-${version}/build/mac"
+          make prefix=/usr/local/work/astyle@${version}
+          sudo make install prefix=/usr/local/work/astyle@${version}
+
+      - name: Verify AStyle
+        run: |
+          version="${{ matrix.astyle-version }}"
+          /usr/local/work/astyle@${version}/bin/astyle --version
+
+      - name: Package AStyle
+        run: |
+          version="${{ matrix.astyle-version }}"
+          sudo tar -czvf "astyle-${version}-macos11.tar.gz" \
+            -s "|^/|astyle-${version}-macos11/|" \
+            /usr/local/work/astyle@${version}/*
+
+      - name: Upload AStyle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: astyle-${{ matrix.astyle-version }}-macos11.tar.gz
+          path: astyle-${{ matrix.astyle-version }}-macos11.tar.gz
+
+      - name: Upload Binaries to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: astyle-${{ matrix.astyle-version }}-macos11.tar.gz
+          asset_name: astyle-${{ matrix.astyle-version }}-macos11.tar.gz
+          tag: astyle-${{ matrix.astyle-version }}-macos11
+          overwrite: false

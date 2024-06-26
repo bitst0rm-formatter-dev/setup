@@ -1,0 +1,69 @@
+name: Build Clang-Format versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build-clang-format:
+    runs-on: macos-11
+    strategy:
+      matrix:
+        clang-version: ["18.1.8"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          brew install cmake ninja
+
+      - name: Download Clang-Format
+        run: |
+          clang_version="${{ matrix.clang-version }}"
+          curl -LO "https://github.com/llvm/llvm-project/releases/download/llvmorg-${clang_version}/llvm-project-${clang_version}.src.tar.xz"
+          tar -xJf "llvm-project-${clang_version}.src.tar.xz"
+
+      - name: Build Clang-Format
+        run: |
+          clang_version="${{ matrix.clang-version }}"
+          cd "llvm-project-${clang_version}.src"
+          mkdir build
+          cd build
+          cmake ../llvm \
+            -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra" \
+            -DCMAKE_INSTALL_PREFIX=/usr/local/work/clang-format@${clang_version} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -G Ninja
+          ninja clang-format
+          sudo ninja install-clang-format
+          cd ../..
+
+      - name: Verify Clang-Format
+        run: |
+          clang_version="${{ matrix.clang-version }}"
+          /usr/local/work/clang-format@${clang_version}/bin/clang-format --version
+
+      - name: Package Clang-Format
+        run: |
+          clang_version="${{ matrix.clang-version }}"
+          sudo tar -czvf "clang-format-${clang_version}-macos11.tar.gz" \
+            -s "|^/|clang-format-${clang_version}-macos11/|" \
+            /usr/local/work/clang-format@${clang_version}/*
+
+      - name: Upload Clang-Format Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-format-${{ matrix.clang-version }}-macos11.tar.gz
+          path: clang-format-${{ matrix.clang-version }}-macos11.tar.gz
+
+      - name: Upload Binaries to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: clang-format-${{ matrix.clang-version }}-macos11.tar.gz
+          asset_name: clang-format-${{ matrix.clang-version }}-macos11.tar.gz
+          tag: clang-format-${{ matrix.clang-version }}-macos11
+          overwrite: false

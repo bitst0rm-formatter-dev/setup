@@ -1,0 +1,30 @@
+name: Release R versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        r_version: ["4.4.1"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download R
+      run: |
+        curl -LO https://cloud.r-project.org/bin/macosx/big-sur-x86_64/base/R-${{ matrix.r_version }}-x86_64.pkg
+
+    - name: Upload Binaries to Release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: R-${{ matrix.r_version }}-x86_64.pkg
+        asset_name: R-${{ matrix.r_version }}-x86_64.pkg
+        tag: R-${{ matrix.r_version }}-macos11
+        overwrite: false

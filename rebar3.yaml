@@ -1,0 +1,30 @@
+name: Release rebar3 versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rebar3_version: ["3.23.0"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download rebar3
+      run: |
+        curl -LO https://github.com/erlang/rebar3/releases/download/${{ matrix.rebar3_version }}/rebar3
+
+    - name: Upload Binaries to Release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: rebar3
+        asset_name: rebar3
+        tag: rebar3-${{ matrix.rebar3_version }}-macos11
+        overwrite: false

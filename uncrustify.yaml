@@ -1,0 +1,68 @@
+name: Build Uncrustify versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build-uncrustify:
+    runs-on: macos-11
+    strategy:
+      matrix:
+        uncrustify-version: ["0.79.0"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          brew install cmake ninja
+
+      - name: Download Uncrustify
+        run: |
+          uncrustify_version="${{ matrix.uncrustify-version }}"
+          curl -LO "https://github.com/uncrustify/uncrustify/releases/download/uncrustify-${uncrustify_version}/uncrustify-${uncrustify_version}.tar.gz"
+          tar -xzf "uncrustify-${uncrustify_version}.tar.gz"
+
+      - name: Build Uncrustify
+        run: |
+          uncrustify_version="${{ matrix.uncrustify-version }}"
+          cd "uncrustify-${uncrustify_version}"
+          mkdir build
+          cd build
+          cmake .. \
+            -DCMAKE_INSTALL_PREFIX=/usr/local/work/uncrustify@${uncrustify_version} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -G Ninja
+          ninja
+          sudo ninja install
+          cd ../..
+
+      - name: Verify Uncrustify
+        run: |
+          uncrustify_version="${{ matrix.uncrustify-version }}"
+          /usr/local/work/uncrustify@${uncrustify_version}/bin/uncrustify --version
+
+      - name: Package Uncrustify
+        run: |
+          uncrustify_version="${{ matrix.uncrustify-version }}"
+          sudo tar -czvf "uncrustify-${uncrustify_version}-macos11.tar.gz" \
+            -s "|^/|uncrustify-${uncrustify_version}-macos11/|" \
+            /usr/local/work/uncrustify@${uncrustify_version}/*
+
+      - name: Upload Uncrustify Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uncrustify-${{ matrix.uncrustify-version }}-macos11.tar.gz
+          path: uncrustify-${{ matrix.uncrustify-version }}-macos11.tar.gz
+
+      - name: Upload Binaries to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: uncrustify-${{ matrix.uncrustify-version }}-macos11.tar.gz
+          asset_name: uncrustify-${{ matrix.uncrustify-version }}-macos11.tar.gz
+          tag: uncrustify-${{ matrix.uncrustify-version }}-macos11
+          overwrite: false

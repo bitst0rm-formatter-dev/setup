@@ -1,0 +1,30 @@
+name: Release Haskell versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        haskell_version: ["0.1.22.0"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download Haskell
+      run: |
+        curl -LO https://github.com/haskell/ghcup-hs/releases/download/v${{ matrix.haskell_version }}/x86_64-apple-darwin-ghcup-${{ matrix.haskell_version }}
+
+    - name: Upload Binaries to Release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: x86_64-apple-darwin-ghcup-${{ matrix.haskell_version }}
+        asset_name: x86_64-apple-darwin-ghcup-${{ matrix.haskell_version }}
+        tag: haskell-${{ matrix.haskell_version }}-macos11
+        overwrite: false

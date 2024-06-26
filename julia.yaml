@@ -1,0 +1,30 @@
+name: Release Julia versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        julia_version: ["1.10.4"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download Julia
+      run: |
+        curl -LO https://julialang-s3.julialang.org/bin/mac/x64/1.10/julia-${{ matrix.julia_version }}-mac64.tar.gz
+
+    - name: Upload Binaries to Release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: julia-${{ matrix.julia_version }}-mac64.tar.gz
+        asset_name: julia-${{ matrix.julia_version }}-mac64.tar.gz
+        tag: julia-${{ matrix.julia_version }}-macos11
+        overwrite: false

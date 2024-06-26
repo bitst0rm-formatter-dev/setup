@@ -1,0 +1,202 @@
+name: Build Ruby versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build-dependencies:
+    runs-on: macos-11
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Tools
+        run: |
+          brew install autoconf automake libtool
+
+      - name: Setup Environment
+        run: |
+          sudo mkdir -p /usr/local/work/{openssl,readline,yaml,zlib,ruby@3.3.3}
+
+      - name: Build Dependencies
+        run: |
+          # Function to build and package dependencies
+          build_and_package() {
+            local url=$1
+            local archive_name=$2
+            local unpacked_name=$3
+            local dir_name=$4
+            local prefix=$5
+            local extra_commands=$6
+            local extra_args=$7
+            local export=$8
+
+            curl -LO $url
+            tar -xf $archive_name
+            mv $unpacked_name $dir_name
+            cd $dir_name
+            $extra_commands
+            ./configure --prefix=$prefix $extra_args
+            make
+            sudo make install
+            $export
+            cd ..
+            sudo tar -czvf "${unpacked_name}-macos11.tar.gz" -s "|^/|${unpacked_name}-macos11/|" $prefix/*
+            sudo rm -rf $dir_name $archive_name
+          }
+
+          # OpenSSL
+          build_and_package \
+            "https://github.com/openssl/openssl/releases/download/openssl-3.3.1/openssl-3.3.1.tar.gz" \
+            "openssl-3.3.1.tar.gz" \
+            "openssl-3.3.1" \
+            "openssl" \
+            "/usr/local/work/openssl" \
+            "" \
+            "" \
+            "export PATH=/usr/local/work/openssl/bin:$PATH; export LD_LIBRARY_PATH=/usr/local/work/openssl/lib:$LD_LIBRARY_PATH"
+
+          # readline
+          build_and_package \
+            "https://ftp.gnu.org/gnu/readline/readline-8.2.tar.gz" \
+            "readline-8.2.tar.gz" \
+            "readline-8.2" \
+            "readline" \
+            "/usr/local/work/readline" \
+            "" \
+            "--with-curses" \
+            "export PATH=/usr/local/work/readline/bin:$PATH; export LD_LIBRARY_PATH=/usr/local/work/readline/lib:$LD_LIBRARY_PATH"
+
+          # LibYAML
+          build_and_package \
+            "https://github.com/yaml/libyaml/releases/download/0.2.5/yaml-0.2.5.tar.gz" \
+            "yaml-0.2.5.tar.gz" \
+            "yaml-0.2.5" \
+            "yaml" \
+            "/usr/local/work/yaml" \
+            "" \
+            "" \
+            "export PATH=/usr/local/work/yaml/bin:$PATH; export LD_LIBRARY_PATH=/usr/local/work/yaml/lib:$LD_LIBRARY_PATH"
+
+          # zlib
+          build_and_package \
+            "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz" \
+            "zlib-1.3.1.tar.gz" \
+            "zlib-1.3.1" \
+            "zlib" \
+            "/usr/local/work/zlib" \
+            "" \
+            "" \
+            "export PATH=/usr/local/work/zlib/bin:$PATH; export LD_LIBRARY_PATH=/usr/local/work/zlib-1.3.1/lib:$LD_LIBRARY_PATH"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependencies-macos11
+          path: |
+            openssl-3.3.1-macos11.tar.gz
+            readline-8.2-macos11.tar.gz
+            yaml-0.2.5-macos11.tar.gz
+            zlib-1.3.1-macos11.tar.gz
+
+      - name: Upload OpenSSL to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: openssl-3.3.1-macos11.tar.gz
+          asset_name: openssl-3.3.1-macos11.tar.gz
+          tag: dependencies-macos11
+          overwrite: false
+
+      - name: Upload readline to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: readline-8.2-macos11.tar.gz
+          asset_name: readline-8.2-macos11.tar.gz
+          tag: dependencies-macos11
+          overwrite: false
+
+      - name: Upload LibYAML to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: yaml-0.2.5-macos11.tar.gz
+          asset_name: yaml-0.2.5-macos11.tar.gz
+          tag: dependencies-macos11
+          overwrite: false
+
+      - name: Upload zlib to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: zlib-1.3.1-macos11.tar.gz
+          asset_name: zlib-1.3.1-macos11.tar.gz
+          tag: dependencies-macos11
+          overwrite: false
+
+      - name: Build Ruby Versions
+        run: |
+          build_ruby() {
+            local version=$1
+            local url=$2
+            local archive_name=$3
+            local unpacked_name=$4
+            local dir_name=$5
+            local prefix=$6
+
+            wget $url
+            tar -xzf $archive_name
+            mv $unpacked_name $dir_name
+            cd $dir_name
+
+            args=(
+              --disable-debug
+              --disable-silent-rules
+              --prefix=$prefix
+              --enable-shared
+              --with-openssl-dir=/usr/local/work/openssl
+              --with-readline-dir=/usr/local/work/readline
+              --with-libyaml-dir=/usr/local/work/yaml
+              --with-zlib-dir=/usr/local/work/zlib
+            )
+
+            ./autogen.sh
+            ./configure "${args[@]}"
+            make
+            sudo make install
+            cd ..
+            sudo tar -czvf "${unpacked_name}-macos11.tar.gz" -s "|^/|${unpacked_name}-macos11/|" $prefix/*
+            sudo rm -rf $dir_name $archive_name
+          }
+
+          build_ruby \
+            "27.0" \
+            "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.3.tar.gz" \
+            "ruby-3.3.3.tar.gz" \
+            "ruby-3.3.3" \
+            "ruby@3.3.3" \
+            "/usr/local/work/ruby@3.3.3"
+
+      - name: Verify Ruby Versions
+        run: |
+          /usr/local/work/ruby@3.3.3/bin/ruby --version
+
+      - name: Upload Ruby Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruby-macos11
+          path: |
+            ruby-3.3.3-macos11.tar.gz
+
+      - name: Upload Ruby 3.3.3 to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ruby-3.3.3-macos11.tar.gz
+          asset_name: ruby-3.3.3-macos11.tar.gz
+          tag: ruby-macos11
+          overwrite: false

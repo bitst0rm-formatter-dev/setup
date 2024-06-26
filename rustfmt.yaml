@@ -1,0 +1,30 @@
+name: Release rustfmt versions
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust_version: ["1.5.1"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download rustfmt
+      run: |
+        curl -LO https://github.com/rust-lang/rustfmt/releases/download/v${{ matrix.rust_version }}/rustfmt_macos-x86_64_v${{ matrix.rust_version }}.tar.gz
+
+    - name: Upload Binaries to Release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: rustfmt_macos-x86_64_v${{ matrix.rust_version }}.tar.gz
+        asset_name: rustfmt_macos-x86_64_v${{ matrix.rust_version }}.tar.gz
+        tag: rustfmt-${{ matrix.rust_version }}-macos11
+        overwrite: false
