@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+jobs:
+  - name: Download Versions
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Versions Script
+        run: ./download.sh
+
+  - name: Upload Artifacts
+    uses: actions/upload-artifact@v4
+    with:
+      name: artifacts-macos11
+      path: |
+        ./download/*
+
+  - name: Upload Release
+    uses: svenstaro/upload-release-action@v2
+    with:
+      repo_token: ${{ secrets.GITHUB_TOKEN }}
+      file: ./download/*
+      file_glob: true
+      overwrite: false
+      tag: release-macos11
